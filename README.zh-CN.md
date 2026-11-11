@@ -28,8 +28,18 @@ SM8850 触控与 Adreno 840 适配。Actions 编译菜单启动镜像、Darwin 2
 
 **当前尚不能启动 iOS 27。** 实测 iOS 27.2.1 内核使用 Darwin 27、ARM64e 和
 MH_FILESET；继承的源码与驱动 ABI 使用 Darwin 23、ARM64。对应的
-XNU 13432.42.3 源码标签尚未公开。手机已在线，当前临时菜单启动仍黑屏；
+XNU 13432.42.3 源码标签尚未公开。手机目前离线，此前临时菜单启动仍黑屏；
 触控和 GPU 的实际运行需在固件启动链正常后继续验证。实测设备参数和固定固件版本见设备仓库。
+
+离线调试使用[独立 QEMU 目标](tests/qemu/README.zh-CN.md)：AAVMF、UniXNU 菜单、
+DarwinBoot 和单独编译的通用 Darwin 23 内核。已修复缺少 AMFI 策略节点和 pthread
+组件的问题，实际完成平台、NVRAM、CPU、GIC 与计时中断初始化，停在根设备缺失的挂载错误；
+尚未提供根卷或启动用户态。菜单六组回归及正反内核启动对照均已通过。
+[严格回归 42977412592](https://github.com/NiandeNian/UniXNU-songyuan/actions/runs/42977412592)
+三项全部成功，正向运行实际记录 19 次计时中断；缺少 AMFI 策略的对照在 BSD 之前拒绝。
+
+当前官方文档另有实验性的 iPadOS 27.0.1 ARM64e 配置。采用它需要从此 fork 的
+Darwin 23 构建迁移 ABI 和 PAC，不能直接使此前的 iOS 27.2.1 输入兼容。
 
 🎉 **News:** 原生 Metal GPU 驱动已完全工作在小米平板 6S Pro（sheng）上。render server 通过 Adreno 740 合成系统界面，列入白名单的进程会获得各自的 Metal 设备。详见 [Adreno 740 驱动文档](https://unixnu.com/zh/drivers/native-adreno)。
 

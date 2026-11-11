@@ -40,6 +40,15 @@ official documentation also provides an experimental iPadOS 27.0.1 ARM64e
 profile; adopting that profile requires a separate ABI/PAC migration from this
 fork's Darwin 23 build and does not make the inspected iOS 27.2.1 input compatible.
 
+QEMU now passes all six UEFI smoke groups and the real-kernel positive/negative
+comparison. After supplying the required AMFI DT policy and the matching pthread
+component, the generic kernel initializes its platform, NVRAM, CPU, GIC and real
+timer IRQs. It then stops at `Failed to mount root device`: this target supplies
+no root volume or userspace. See the linked record for logs and reproducible steps.
+[Strict regression 42977412592](https://github.com/NiandeNian/UniXNU-songyuan/actions/runs/42977412592)
+passed all three jobs, with 19 real timer IRQs and rejection before BSD in the
+missing-AMFI-policy control.
+
 🎉 **News:** The native Metal GPU driver is now fully working on the Xiaomi Pad 6S Pro (sheng). The render server composites the system UI through the Adreno 740, and listed processes get their own Metal devices. See the [Adreno 740 driver documentation](https://unixnu.com/drivers/native-adreno).
 
 An independent project to run iOS and macOS on non-Apple ARM64 hardware through UEFI.
