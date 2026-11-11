@@ -116,7 +116,17 @@ jobs:
           python3 - <<'PY'
           import json
           from pathlib import Path
+          positive = json.loads(Path('out/qemu/entry/report.json').read_text())
           report = json.loads(Path('out/qemu/entry/negative/report.json').read_text())
+          assert positive['entry_pass'] and not positive.get('error')
+          assert 'Failed to mount root device' in positive.get('panic_format', '')
+          state = positive['driver_state']
+          assert state['_armdt_platform_configured'] == 1 and state['_armdt_platform_nvram_proxy'] == 1
+          assert state['_armdt_platform_cpu_count'] == 1 and state['_armcpu_registered'] == 1
+          assert state['_armcpu_gic_ready'] == 1 and state['_armcpu_timer_interrupts'] > 0
+          assert positive['kernel_sha256'] == report['kernel_sha256']
+          assert positive['firmware_sha256'] == report['firmware_sha256']
+          assert not report.get('error')
           assert report['loader_validated'] and report['native_4k_mmu_observed']
           assert not report['entry_pass']
           assert 'AMFI: no amfi-only-platform-code device tree node' in report.get('panic_format', '')

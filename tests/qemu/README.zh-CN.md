@@ -37,7 +37,8 @@
 - Ubuntu 2026.05 固件在 QEMU 6.2 下发生同步异常，不用于这个环境。
 - 固定 2024.02 固件后完整 `smoke.sh` 返回 0，六组场景全部通过；其中包括 14 种 UEFI kext 协议/拒绝情况，以及 800×1000 布局阈值检查。竖屏截图已人工检查。
 - 从 Actions 下载的独立内核 `729eb8c4bfab43084343e3388e341df5c51a19ac9f53e0104ad12f098ab479e1` 已实际运行。缺少 AMFI 策略节点时只到 `_arm_init`、`_PE_init_iokit`，随后报 `AMFI: no amfi-only-platform-code device tree node!`。
-- 加入文档要求的 `/chosen/amfi-only-platform-code=1` 后，同一内核到达 `_bsd_init`；实际 `TCR_EL1=0x22a51a251a`、MMU 开启、计数器 62500000 Hz，平台专家和 CPU 已注册。下一处真实 panic 为 pthread 函数表未加载；配置现已启用匹配 Darwin 23 的真实 Apple pthread 组件并重新构建。
+- 加入文档要求的 `/chosen/amfi-only-platform-code=1` 后，同一内核到达 `_bsd_init`；实际 `TCR_EL1=0x22a51a251a`、MMU 开启、计数器 62500000 Hz，平台专家和 CPU 已注册。随后发现 pthread 函数表未加载，已启用匹配 Darwin 23 的真实 Apple pthread 组件。
+- [Actions 42975902025](https://github.com/NiandeNian/UniXNU-songyuan/actions/runs/42975902025) 的 UEFI、内核、运行对照三项全部通过。新版实际完成平台、NVRAM、CPU、GIC 初始化，计时中断计数为 15；约 61 秒后报 `Failed to mount root device`。该目标没有根设备，因此这证明已推进到根挂载边界，不表示根卷或用户态成功。
 
 本地日志在 `out/qemu/` 和 `package/Build/Smoke/`，不会提交生成文件。
 Actions 的 `qemu-uefi`、`qemu-kernel`、`qemu-entry-evidence` 保存编译与运行证据。
@@ -83,4 +84,6 @@ QEMU 6.2 的 target XML 缺少 `xi` 声明，EL1 的 SCTLR 名称也为 `SCTLR`�
 `entry_pass` 只表示加载器验证并到达内核/IOKit/BSD；后续 panic 是待解决事项。
 还要求实际开启 4 KiB MMU 并读到 62500000 Hz。Actions 再用 `--without-amfi-node`
 执行缺少节点的真实拒绝控制，必须在 BSD 之前由原版 AMFI 报错，不能将超时或其他错误当成通过。
+正向验收还要求平台/NVRAM/CPU/GIC 成功、真实计时中断大于零，且最终错误必须是本目标未提供根设备的错误。
+正反运行必须使用同一内核和固件，GDB 观察错误会使验收失败。
 ESP 与固件 code 只读，NVRAM 使用临时副本。该脚本不访问手机或真实块设备。
