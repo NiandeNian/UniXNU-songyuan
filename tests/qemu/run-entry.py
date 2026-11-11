@@ -85,7 +85,7 @@ def trim_adt(node):
         trim_adt(child)
 
 
-def read_registers(packets):
+def read_registers(packets, extra=()):
     next_number, values = 0, {}
 
     def xml(name):
@@ -111,7 +111,7 @@ def read_registers(packets):
                 next_number = number + 1
                 name = item.get('name')
                 if name in ('pc', 'sp', 'cpsr', 'TCR_EL1', 'SCTLR', 'SCTLR_EL1', 'TTBR0_EL1', 'TTBR1_EL1',
-                            'CNTFRQ_EL0', 'ESR_EL1', 'FAR_EL1', 'ELR_EL1', 'SPSR_EL1', 'MIDR_EL1'):
+                            'CNTFRQ_EL0', 'ESR_EL1', 'FAR_EL1', 'ELR_EL1', 'SPSR_EL1', 'MIDR_EL1') + tuple(extra):
                     raw = packets.request(f'p{number:x}')
                     if raw and not raw.startswith('E') and set(raw) <= set('0123456789abcdef'):
                         values[name] = hex(int.from_bytes(bytes.fromhex(raw), 'little'))
