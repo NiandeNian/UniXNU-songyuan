@@ -114,6 +114,18 @@ def read_registers(packets):
     return values
 
 
+def driver_state(packets, names):
+    values = {}
+    for symbol, size in [('_armdt_platform_configured', 4), ('_armdt_platform_cpu_count', 4),
+                         ('_armdt_platform_nvram_proxy', 4), ('_armcpu_registered', 4),
+                         ('_armcpu_gic_ready', 4), ('_armcpu_timer_interrupts', 8)]:
+        if symbol in names:
+            raw = packets.request(f'm{names[symbol]:x},{size:x}')
+            if len(raw) == size * 2 and set(raw) <= set('0123456789abcdef'):
+                values[symbol] = int.from_bytes(bytes.fromhex(raw), 'little')
+    return values
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--efi-dir', type=Path, required=True)
@@ -121,6 +133,8 @@ def main():
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--timeout', type=int, default=90)
     args = parser.parse_args()
+    if not 1 <= args.timeout <= 600:
+        parser.error('--timeout must be between 1 and 600 seconds')
     args.out.mkdir(parents=True, exist_ok=True)
     esp = args.out / 'esp'
     payload = esp / 'EFI/UniXNU/Payloads'
@@ -157,13 +171,15 @@ args = "-v serial=3 debug=0x14e kt_fixed_zones=120"
     runner = module(ROOT / 'package/Scripts/qemu-run.py')
     code, variables = runner.find_firmware(None)
     names = symbols(args.kernel.read_bytes())
-    checkpoints = ['_arm_init', '_PE_init_iokit', '_bsd_init', '_panic']
-    missing = [n for n in checkpoints if n not in names]
+    checkpoints = ['_arm_init', '_PE_init_iokit', '_bsd_init']
+    missing = [n for n in [*checkpoints, '_panic'] if n not in names]
     if missing:
         parser.error(f'Missing real kernel symbols: {missing}')
     report = {'kernel_sha256': hashlib.sha256(args.kernel.read_bytes()).hexdigest(),
               'adt_sha256': hashlib.sha256(adt.read_bytes()).hexdigest(), 'cpu': 'max', 'memory_mib': 2048,
-              'scope': 'generic XNU entry; no root or hardware validation', 'checkpoints': []}
+              'scope': 'generic XNU entry; no root or hardware validation', 'checkpoints': [],
+              'registers_or_validation_state_modified': False,
+              'firmware_sha256': hashlib.sha256(code.read_bytes()).hexdigest()}
     log = args.out / 'serial.log'
     with tempfile.TemporaryDirectory(prefix='unixnu-entry-') as work:
         work = Path(work)
@@ -184,21 +200,29 @@ args = "-v serial=3 debug=0x14e kt_fixed_zones=120"
         with (args.out / 'qemu.log').open('w') as output:
             proc = subprocess.Popen(command, stdout=output, stderr=output)
             qmp = runner.Qmp(str(work / 'qmp.sock'))
-            try:
-                with socket.create_connection(('127.0.0.1', port), timeout=5) as connection:
+            with socket.create_connection(('127.0.0.1', port), timeout=5) as connection:
+                try:
                     packets = Packets(connection)
                     packets.request('qSupported')
                     deadline = time.monotonic() + args.timeout
-                    for name in checkpoints:
+                    panic = names['_panic']
+                    if packets.request(f'Z1,{panic:x},4') != 'OK':
+                        raise RuntimeError('Breakpoint refused: _panic')
+                    for name in [*checkpoints, '_panic']:
                         address = names[name]
-                        if packets.request(f'Z1,{address:x},4') != 'OK':
+                        if name != '_panic' and packets.request(f'Z1,{address:x},4') != 'OK':
                             raise RuntimeError(f'Breakpoint refused: {name}')
                         connection.settimeout(max(0.1, deadline - time.monotonic()))
                         stop = packets.request('c')
+                        connection.settimeout(3)
                         registers = read_registers(packets)
-                        if int(registers.get('pc', '0'), 16) != address:
+                        pc = int(registers.get('pc', '0'), 16)
+                        if pc not in (address, panic):
                             raise RuntimeError(f'Unexpected stop: {stop}, {registers}')
+                        if pc == panic:
+                            name, address = '_panic', panic
                         report['checkpoints'].append({'symbol': name, 'address': hex(address), 'registers': registers})
+                        report['driver_state'] = driver_state(packets, names)
                         print(f'REACHED {name} at {address:#x}', flush=True)
                         packets.request(f'z1,{address:x},4')
                         if name == '_panic':
@@ -207,23 +231,31 @@ args = "-v serial=3 debug=0x14e kt_fixed_zones=120"
                             message = packets.request(f'm{pointer:x},100')
                             if not message.startswith('E'):
                                 report['panic_format'] = bytes.fromhex(message).split(b'\0')[0].decode(errors='replace')
-            except Exception as exc:
-                report['error'] = str(exc)
-                try:
-                    packets.request(None)
-                    report['last_registers'] = read_registers(packets)
-                except Exception:
-                    pass
-            finally:
-                ppm = work / 'screen.ppm'
-                if 'return' in qmp.command('screendump', filename=str(ppm)):
-                    runner.ppm_to_png(ppm, args.out / 'screen.png')
-                qmp.command('quit')
-                proc.wait(timeout=5)
+                            break
+                except Exception as exc:
+                    report['error'] = str(exc)
+                    try:
+                        packets.request(None)
+                        report['last_registers'] = read_registers(packets)
+                        report['driver_state'] = driver_state(packets, names)
+                    except Exception:
+                        pass
+                finally:
+                    ppm = work / 'screen.ppm'
+                    if 'return' in qmp.command('screendump', filename=str(ppm)):
+                        runner.ppm_to_png(ppm, args.out / 'screen.png')
+                    qmp.command('quit')
+                    proc.wait(timeout=5)
     text = runner.ANSI.sub('', log.read_text(errors='replace'))
     (args.out / 'serial.clean.log').write_text(text)
     report['loader_validated'] = 'inputs validated; exiting boot services' in text
-    report['entry_pass'] = report['loader_validated'] and len(report['checkpoints']) >= 3
+    reached = [c['symbol'] for c in report['checkpoints']]
+    report['entry_pass'] = report['loader_validated'] and all(name in reached for name in checkpoints)
+    kernel_registers = report['checkpoints'][0]['registers'] if report['checkpoints'] else {}
+    tcr = int(kernel_registers.get('TCR_EL1', '0'), 16)
+    sctlr = int(kernel_registers.get('SCTLR_EL1', '0'), 16)
+    report['native_4k_mmu_observed'] = bool(sctlr & 1) and (tcr >> 14 & 3) == 0 and (tcr >> 30 & 3) == 2
+    report['counter_62500000_observed'] = int(kernel_registers.get('CNTFRQ_EL0', '0'), 16) == 62500000
     (args.out / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2))
     return 0 if report['entry_pass'] else 1

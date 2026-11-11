@@ -57,6 +57,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Check entry archive inputs
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import shlex, tomllib
+          device = Path('tests/qemu/device')
+          for entry in tomllib.loads((device / 'board.toml').read_text())['kernel']['archives']:
+              script = shlex.split(entry)[0]
+              assert any((base / 'scripts' / script).is_file() for base in (Path('.'), device)), script
+          PY
       - name: Install build tools
         run: |
           brew install cmake ninja unifdef llvm lld mtools dtc
