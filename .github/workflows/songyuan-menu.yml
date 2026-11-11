@@ -4,7 +4,7 @@ on:
     inputs:
       uefi_run_id:
         description: Successful songyuan-uefi run with an unexpired songyuan-uefi artifact
-        default: '43007970684'
+        default: '43010615296'
         required: true
   push:
     paths: ['.github/workflows/songyuan-menu.yml']
@@ -24,17 +24,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: NiandeNian/songyuan-uefi
-          ref: 5ad1343560596333ecf909f650706d1e87e3d096
+          ref: f24dfe3d000994e84e47d846f44e12fbceb2e458
           path: uefi-port
       - name: Host dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang llvm device-tree-compiler
+          sudo apt-get install -y clang lld llvm device-tree-compiler
       - uses: actions/download-artifact@v4
         with:
           name: songyuan-uefi
           repository: NiandeNian/songyuan-uefi
-          run-id: ${{ inputs.uefi_run_id || '43007970684' }}
+          run-id: ${{ inputs.uefi_run_id || '43010615296' }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: firmware
       - name: Fetch BootShim and boot image tool
@@ -43,7 +43,7 @@ jobs:
           git -C Mu-Silicium fetch --depth 1 https://github.com/Project-Silicium/Mu-Silicium.git 46e4ac0800862fb3ee6da09f0028fbef4e767648
           git -C Mu-Silicium checkout FETCH_HEAD
           cp uefi-port/Resources/Configs/songyuan.toml Mu-Silicium/Resources/Configs/songyuan.toml
-          cp uefi-port/BootShim/BootShim.S Mu-Silicium/BootShim/BootShim.S
+          cp -r uefi-port/BootShim/. Mu-Silicium/BootShim/
       - name: Pack and verify the UniXNU menu image
         run: |
           fd=$(find firmware -name SILICIUM_UEFI.fd -type f)

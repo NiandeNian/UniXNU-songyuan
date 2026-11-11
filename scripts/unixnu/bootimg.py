@@ -21,16 +21,33 @@ DEFAULTS = {'header_version': 0, 'base': 0, 'kernel_offset': 0x8000, 'tags_offse
 MKBOOTIMG_FLAGS = ('base', 'kernel_offset', 'tags_offset', 'pagesize', 'header_version', 'ramdisk_offset', 'second_offset', 'cmdline')
 
 
-def compile_shim(uefi, base, size, requires_header, scratch, text_offset=None, image_flags=None):
+def compile_shim(uefi, base, size, requires_header, scratch, text_offset=None, image_flags=None, screen_log=False):
     clang, objcopy, nm = tool('clang'), tool('llvm-objcopy', 'brew install llvm'), tool('llvm-nm', 'brew install llvm')
     source = uefi / 'BootShim/BootShim.S'
     if not source.is_file():
         raise Error(f'{source} missing: --uefi must be a Mu-Silicium checkout')
     obj = scratch / 'shim.o'
     run([clang, '--target=aarch64-none-elf', '-c', f'-DFD_BASE={base}', f'-DFD_SIZE={size}',
-         f'-DREQUIRES_KERNEL_HEADER={int(requires_header)}', source, '-o', obj], capture=True)
+         f'-DREQUIRES_KERNEL_HEADER={int(requires_header)}', f'-DSONGYUAN_SCREEN_LOG={int(screen_log)}',
+         source, '-o', obj], capture=True)
+    if screen_log:
+        console = uefi / 'BootShim/ScreenLog.c'
+        linker = uefi / 'BootShim/ScreenLog.ld'
+        if not console.is_file() or not linker.is_file():
+            raise Error('screen_log requires the songyuan diagnostic BootShim sources')
+        console_obj = scratch / 'screen-log.o'
+        run([clang, '--target=aarch64-none-elf', '-c', '-Os', '-ffreestanding', '-fno-builtin',
+             '-fno-stack-protector', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables',
+             '-mgeneral-regs-only', '-mstrict-align', console, '-o', console_obj], capture=True)
+        executable = scratch / 'shim.elf'
+        run([tool('ld.lld'), '-T', linker, obj, console_obj, '-o', executable], capture=True)
+        obj = executable
     run([objcopy, '-O', 'binary', obj, scratch / 'shim.bin'], capture=True)
     shim = (scratch / 'shim.bin').read_bytes()
+    if screen_log and requires_header:
+        header = bytearray(shim)
+        struct.pack_into('<2Q', header, 8, base, len(shim) + size)
+        shim = bytes(header)
     symbols = run([nm, '-n', obj], capture=True)
     offset = next((int(line.split()[0], 16) for line in symbols.splitlines() if line.endswith(' _Payload')), None)
     if offset != len(shim):
@@ -100,7 +117,8 @@ def build(ctx, uefi, fd, dtb, ramdisk=None, output=None):
         scratch = Path(scratch_name)
         shim_config = config.get('boot_shim', {})
         shim = compile_shim(uefi, base, size, requires_header, scratch,
-                            shim_config.get('text_offset'), shim_config.get('image_flags'))
+                            shim_config.get('text_offset'), shim_config.get('image_flags'),
+                            screen_log=shim_config.get('screen_log', False))
         kernel_config = config.get('boot_image_kernel', {})
         compression = kernel_config.get('kernel_compression', 'gzip')
         append_dtb = kernel_config.get('append_dtb', True)
@@ -142,8 +160,11 @@ def build(ctx, uefi, fd, dtb, ramdisk=None, output=None):
             struct.pack_into('<I', packed, 1580, 0)
             out.write_bytes(packed)
         report = verify(out, combined, tree, ramdisk_path, image, compression, append_dtb)
+        if shim_config.get('screen_log', False):
+            shutil.copyfile(scratch / 'shim.elf', out.parent / 'BootShim-screen.elf')
     report.update(image_sha256=sha256_file(out), image_bytes=out.stat().st_size, fd_sha256=sha256_file(fd),
-                  dtb_sha256=sha256_file(dtb), shim_bytes=len(shim), hardware_tested=False)
+                  dtb_sha256=sha256_file(dtb), shim_bytes=len(shim),
+                  screen_log=bool(shim_config.get('screen_log', False)), hardware_tested=False)
     (out.parent / 'boot.json').write_text(json.dumps(report, indent=2) + '\n')
     log(f'bootimg: {out} ({out.stat().st_size} bytes)')
     return out
