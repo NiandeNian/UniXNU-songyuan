@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: NiandeNian/songyuan-uefi
-          ref: 676b1f79fb8448aeff646484a9c24d1ace0dcbdc
+          ref: cf6f846ac1ce8fffa8df867e8441cc8cd3ac1e12
           path: uefi-port
       - name: Host dependencies
         run: |
@@ -43,7 +43,7 @@ jobs:
           git -C Mu-Silicium fetch --depth 1 https://github.com/Project-Silicium/Mu-Silicium.git 46e4ac0800862fb3ee6da09f0028fbef4e767648
           git -C Mu-Silicium checkout FETCH_HEAD
           cp uefi-port/Resources/Configs/songyuan.toml Mu-Silicium/Resources/Configs/songyuan.toml
-          sed -i 's/\.quad FD_SIZE /\.quad FD_SIZE + _Payload - _Head /' Mu-Silicium/BootShim/BootShim.S
+          cp uefi-port/BootShim/BootShim.S Mu-Silicium/BootShim/BootShim.S
       - name: Pack and verify the UniXNU menu image
         run: |
           fd=$(find firmware -name SILICIUM_UEFI.fd -type f)
