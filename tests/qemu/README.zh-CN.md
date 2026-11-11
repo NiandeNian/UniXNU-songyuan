@@ -76,5 +76,7 @@ python3 tests/qemu/run-entry.py --efi-dir package/Build/Out/AARCH64-DEBUG \
 仅按 XNU 实际编译记录构建 ArmDTPlatform、ArmCpu，检查 ARM64/iOS 17 目标。
 GDB 使用实际 Mach-O 符号设置硬件停点，并记录 PC、EL1 翻译寄存器和原始 panic 格式；
 panic 停点从启动时启用，早期故障也会保留。现有驱动状态只由 GDB 读取。
+QEMU 6.2 的 target XML 缺少 `xi` 声明，EL1 的 SCTLR 名称也为 `SCTLR`；
+运行器补齐 XML 命名空间并同时保留原始寄存器名和标准名。已在实际 QEMU GDB 服务上验证读取。
 `entry_pass` 只表示加载器验证并到达内核/IOKit/BSD；后续 panic 是待解决事项。
 ESP 与固件 code 只读，NVRAM 使用临时副本。该脚本不访问手机或真实块设备。

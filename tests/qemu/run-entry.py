@@ -99,17 +99,25 @@ def read_registers(packets):
             if reply[0] == 'l':
                 break
         nonlocal next_number
-        for item in ET.fromstring(''.join(chunks)).iter():
+        document = ''.join(chunks)
+        # QEMU 6.2 uses xi:include without declaring the namespace.
+        if 'xi:include' in document and 'xmlns:xi=' not in document:
+            document = document.replace('<target', '<target xmlns:xi="http://www.w3.org/2001/XInclude"', 1)
+        for item in ET.fromstring(document).iter():
             if item.tag.endswith('include'):
                 xml(item.attrib['href'])
             elif item.tag == 'reg':
                 number = int(item.get('regnum', next_number))
                 next_number = number + 1
                 name = item.get('name')
-                if name in ('pc', 'sp', 'cpsr', 'TCR_EL1', 'SCTLR_EL1', 'TTBR0_EL1', 'TTBR1_EL1', 'CNTFRQ_EL0', 'ESR_EL1', 'FAR_EL1'):
+                if name in ('pc', 'sp', 'cpsr', 'TCR_EL1', 'SCTLR', 'SCTLR_EL1', 'TTBR0_EL1', 'TTBR1_EL1',
+                            'CNTFRQ_EL0', 'ESR_EL1', 'FAR_EL1', 'ELR_EL1', 'SPSR_EL1', 'MIDR_EL1'):
                     raw = packets.request(f'p{number:x}')
                     if raw and not raw.startswith('E') and set(raw) <= set('0123456789abcdef'):
                         values[name] = hex(int.from_bytes(bytes.fromhex(raw), 'little'))
+                        if name == 'SCTLR':
+                            # QEMU 6.2 exposes the EL1 register under this legacy name.
+                            values['SCTLR_EL1'] = values[name]
     xml('target.xml')
     return values
 
