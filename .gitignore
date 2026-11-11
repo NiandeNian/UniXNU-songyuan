@@ -1,6 +1,7 @@
 # Build outputs and caches (re-derivable; nothing important lives here)
 /build/
 /Build/
+/package/Build/
 /Conf/
 /out/
 /.cache/

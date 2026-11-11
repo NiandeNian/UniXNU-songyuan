@@ -1,0 +1,102 @@
+name: QEMU offline bring-up
+
+on:
+  workflow_dispatch:
+  push:
+    paths: ['tests/qemu/**', 'package/**', '.github/workflows/qemu.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  uefi:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install QEMU and build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y qemu-system-arm qemu-efi-aarch64 device-tree-compiler mtools clang-14 llvm-14 lld-14 uuid-dev nasm build-essential
+      - name: Fetch fixed EDK II inputs
+        run: |
+          git clone https://github.com/microsoft/mu_basecore "$RUNNER_TEMP/edk2"
+          git -C "$RUNNER_TEMP/edk2" checkout 6f805f26a4366fe56790130dc2f8f3e1b4c2fe28
+          git -C "$RUNNER_TEMP/edk2" submodule update --init --depth 1 MdePkg/Library/BaseFdtLib/libfdt MdePkg/Library/MipiSysTLib/mipisyst BaseTools/Source/C/BrotliCompress/brotli
+      - name: Build and boot the UEFI package
+        env:
+          UNIXNU_EDK2: ${{ runner.temp }}/edk2
+          CLANG_BIN: /usr/lib/llvm-14/bin/
+          JOBS: '8'
+        run: |
+          bash tests/qemu/build-uefi.sh
+          bash package/Scripts/smoke.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qemu-uefi
+          path: |
+            package/Build/Out/AARCH64-DEBUG/*.efi
+            package/Build/Smoke/*.log
+            package/Build/Smoke/*.png
+
+  kernel:
+    runs-on: macos-latest
+    timeout-minutes: 120
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install build tools
+        run: |
+          brew install cmake ninja unifdef llvm lld mtools dtc
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix lld)/bin" >> "$GITHUB_PATH"
+      - name: Build a separate generic kernel
+        run: |
+          ./unixnu defconfig qemu_entry_defconfig -D tests/qemu/device
+          ./unixnu fetch xnu libplatform libdispatch AvailabilityVersions libpthread corecrypto-2023 IOStorageFamily -D tests/qemu/device
+          ./unixnu kernel -D tests/qemu/device
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qemu-kernel
+          path: |
+            out/qemu/kernel/**
+            out/qemu/logs/**
+            out/qemu/.config
+
+  entry:
+    needs: [uefi, kernel]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: qemu-uefi
+          path: out/qemu/uefi
+      - uses: actions/download-artifact@v4
+        with:
+          name: qemu-kernel
+          path: out/qemu/compiled
+      - name: Install QEMU
+        run: sudo apt-get update -qq && sudo apt-get install -y qemu-system-arm qemu-efi-aarch64
+      - name: Observe real XNU startup
+        run: |
+          python3 tests/qemu/run-entry.py --efi-dir out/qemu/uefi --kernel out/qemu/compiled/kernel/kernel.macho --out out/qemu/entry
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qemu-entry-evidence
+          path: |
+            out/qemu/entry/*.json
+            out/qemu/entry/*.log
+            out/qemu/entry/*.png
