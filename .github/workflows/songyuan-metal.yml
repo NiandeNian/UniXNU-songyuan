@@ -1,0 +1,69 @@
+name: songyuan production Metal
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/songyuan-metal.yml']
+permissions:
+  contents: read
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+jobs:
+  metal:
+    runs-on: macos-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/checkout@v4
+        with:
+          repository: NiandeNian/songyuan-device
+          ref: 5363cbe0ef24fdfdf8096aeaa5ad3b9f4bc7a069
+          path: device
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install userspace build tools
+        run: |
+          brew install ninja glslang shaderc spirv-tools llvm cmake pkg-config
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+          rustup toolchain install 1.98.0 --profile minimal
+          rustup target add aarch64-apple-ios --toolchain 1.98.0
+      - name: Prepare pinned Mesa and Metal translator
+        run: |
+          ./unixnu defconfig songyuan_graphics_defconfig -D device
+          ./unixnu tree -D device
+          python3 out/songyuan/tree/scripts/prepare-gpu-userspace.py
+      - name: Cross-compile production Turnip and Metal plugin
+        run: |
+          python3 out/songyuan/tree/scripts/build-turnip-darwin.py --target ios
+          python3 out/songyuan/tree/scripts/build-songyuan-metal-plugin.py
+          python3 out/songyuan/tree/scripts/make-songyuan-gpu-addon.py out/songyuan/graphics/songyuan-gpu-addon.bin
+          cp out/songyuan/tree/build/adreno-metal-plugin/trust.json out/songyuan/graphics/trust.json
+          echo 'Darwin 23 ARM64 ABI; iOS 27 ARM64e and physical A840 validation pending.' > out/songyuan/graphics/BUILD-SCOPE.txt
+      - name: Check production bundle scope
+        run: |
+          test ! -f out/songyuan/tree/build/adreno-metal-plugin/adrenoprobed
+          test -z "$(find out/songyuan/tree/build/adreno-metal-plugin -maxdepth 1 -name '*.plist' -print)"
+          codesign --verify --strict out/songyuan/tree/build/adreno-metal-plugin/NativeAdrenoMetal.bundle
+      - name: Upload production graphics
+        uses: actions/upload-artifact@v4
+        with:
+          name: songyuan-darwin23-metal
+          path: |
+            out/songyuan/graphics/**
+            out/songyuan/tree/build/adreno-metal-plugin/NativeAdrenoMetal.bundle/**
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload compiler logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: songyuan-metal-compiler-logs
+          path: |
+            out/songyuan/tree/.cache/*log
+            out/songyuan/tree/build/native-metal-bridge/**/Cargo.toml
+          if-no-files-found: warn
+          retention-days: 7
