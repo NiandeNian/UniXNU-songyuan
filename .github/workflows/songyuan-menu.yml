@@ -4,7 +4,7 @@ on:
     inputs:
       uefi_run_id:
         description: Successful songyuan-uefi run with an unexpired songyuan-uefi artifact
-        default: '43025226578'
+        default: '43028929595'
         required: true
   push:
     paths: ['.github/workflows/songyuan-menu.yml']
@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: NiandeNian/songyuan-uefi
-          ref: 18bb3260f97c3cc00c74a22e07c818cd39bb0154
+          ref: a2e67bf85e84af2860d50050ab9abcd711d6ea10
           path: uefi-port
       - name: Host dependencies
         run: |
@@ -34,7 +34,7 @@ jobs:
         with:
           name: songyuan-uefi
           repository: NiandeNian/songyuan-uefi
-          run-id: ${{ inputs.uefi_run_id || '43025226578' }}
+          run-id: ${{ inputs.uefi_run_id || '43028929595' }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: firmware
       - name: Fetch BootShim and boot image tool
