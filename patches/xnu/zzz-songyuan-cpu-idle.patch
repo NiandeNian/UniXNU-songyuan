@@ -1,0 +1,112 @@
+diff --git a/osfmk/arm64/cpu.c b/osfmk/arm64/cpu.c
+--- a/osfmk/arm64/cpu.c
++++ b/osfmk/arm64/cpu.c
+@@ -35,6 +35,11 @@
+ #include <kern/kalloc.h>
+ #include <kern/machine.h>
+ #include <kern/cpu_number.h>
++#include <kern/processor.h>
++#include <kern/recount.h>
++#include <kern/clock.h>
++#include <kern/misc_protos.h>
++#include <pexpert/pexpert.h>
+ #include <kern/percpu.h>
+ #include <kern/thread.h>
+ #include <kern/timer_queue.h>
+@@ -484,6 +489,86 @@
+ }
+ 
+ /*
++ * Songyuan SM8850 governor and core-retention support, adapted from
++ * zg7681/UniXNU-myron's myron-next patch (blob 707634fef461f0c984f7419dc74eb023790726ad).
++ * The captured live DT gives PSCI standby 0x4 and minimum residencies
++ * 560 us for CPUs 0-5 and 686 us for CPUs 6-7. No diagnostic sampling or log worker.
++ */
++#define MYRON_IDLE_CPUS       8
++#define MYRON_IDLE_STATE_RET  0x4u
++
++uint64_t myron_cpu_idle_mach(int cpu);
++uint64_t
++myron_cpu_idle_mach(int cpu)
++{
++	if (cpu < 0 || cpu > ml_get_max_cpu_number()) {
++		return 0;
++	}
++	processor_t p = cpu_to_processor(cpu);
++	struct recount_usage usage = {};
++	uint64_t idle = 0;
++	if (p == PROCESSOR_NULL) {
++		return 0;
++	}
++	recount_processor_usage(&p->pr_recount, &usage, &idle);
++	return idle;
++}
++
++void myron_cpu_recommend(uint64_t cores);
++void
++myron_cpu_recommend(uint64_t cores)
++{
++	sched_perfcontrol_update_recommended_cores_reason(cores | 1u, REASON_CLPC_SYSTEM, 0);
++}
++
++static uint64_t myron_idle_res[2];
++static int myron_idle_mode;
++static uint32_t myron_idle_fail[MYRON_IDLE_CPUS];
++
++static int32_t
++myron_idle_cpu_suspend(uint64_t state)
++{
++	register uint64_t x0 __asm__("x0") = 0xC4000001ULL;
++	register uint64_t x1 __asm__("x1") = state;
++	register uint64_t x2 __asm__("x2") = 0;
++	register uint64_t x3 __asm__("x3") = 0;
++	__asm__ volatile ("smc #0" : "+r"(x0), "+r"(x1), "+r"(x2), "+r"(x3) : :
++	    "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13",
++	    "x14", "x15", "x16", "x17", "cc", "memory");
++	return (int32_t)x0;
++}
++
++void myron_idle_start(void);
++void
++myron_idle_start(void)
++{
++	int mode = 1;
++	(void)PE_parse_boot_argn("myron-idle", &mode, sizeof(mode));
++	nanoseconds_to_absolutetime(560 * 1000ull, &myron_idle_res[0]);
++	nanoseconds_to_absolutetime(686 * 1000ull, &myron_idle_res[1]);
++	__atomic_store_n(&myron_idle_mode, mode == 1, __ATOMIC_RELEASE);
++}
++
++void myron_idle_wfi(unsigned cpu, uint64_t pop);
++void
++myron_idle_wfi(unsigned cpu, uint64_t pop)
++{
++	if (cpu < MYRON_IDLE_CPUS && __atomic_load_n(&myron_idle_mode, __ATOMIC_ACQUIRE) == 1) {
++		const uint64_t now = mach_absolute_time();
++		const unsigned big = ((__builtin_arm_rsr64("MPIDR_EL1") >> 16) & 0xff) != 0;
++		if (pop > now && pop - now >= myron_idle_res[big]) {
++			if (myron_idle_cpu_suspend(MYRON_IDLE_STATE_RET) == 0) {
++				return;
++			}
++			if (++myron_idle_fail[cpu] >= 8) {
++				__atomic_store_n(&myron_idle_mode, 0, __ATOMIC_RELAXED);
++			}
++		}
++	}
++	__builtin_arm_wfi();
++}
++
++/*
+  *	Routine:	cpu_idle
+  *	Function:
+  */
+@@ -603,7 +740,8 @@
+ #if HAS_RETENTION_STATE
+ 		arm64_retention_wfi();
+ #else
+-		__builtin_arm_wfi();
++		/* zzz-myron-cpu-idle: the DT's core retention state when the next timer is far enough */
++		myron_idle_wfi(cpu_data_ptr->cpu_number, cpu_data_ptr->rtcPop);
+ #endif
+ 
+ #if defined(APPLETYPHOON)

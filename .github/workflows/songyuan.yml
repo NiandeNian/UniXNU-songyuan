@@ -5,9 +5,9 @@ on:
     inputs:
       device_ref:
         description: Pinned songyuan-device revision
-        default: f55da2c3814c6af56ece8a3dc64d08ffd142795e
+        default: 3c1917466e6f0fcaf64baade9f3aef3f6f820af1
   push:
-    paths: ['scripts/**', '.github/workflows/songyuan.yml']
+    paths: ['scripts/**', 'patches/xnu/**', '.github/workflows/songyuan.yml']
 
 permissions:
   contents: read
@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: NiandeNian/songyuan-device
-          ref: ${{ inputs.device_ref || 'f55da2c3814c6af56ece8a3dc64d08ffd142795e' }}
+          ref: ${{ inputs.device_ref || '3c1917466e6f0fcaf64baade9f3aef3f6f820af1' }}
           submodules: recursive
           path: device
       - uses: actions/setup-python@v5
@@ -58,6 +58,13 @@ jobs:
           ./unixnu defconfig songyuan_graphics_defconfig -D device
           ./unixnu build kernel -D device
           shasum -a 256 out/songyuan/kernel/kernel.macho
+      - name: Check production GPU object scope
+        run: |
+          nm out/songyuan/tree/build/native-legacy-display/MyronGpuPower.o > out/songyuan/logs/gpu-symbols.txt
+          if grep -Eq '_native_gpu_addon|_myron_debug_|debugPages|metalLines' out/songyuan/logs/gpu-symbols.txt; then
+            echo 'Inherited diagnostic pages entered the production GPU object' >&2
+            exit 1
+          fi
       - name: Record verified build scope
         run: |
           echo 'Built against Darwin 23 ARM64 / iPadOS 17.7.11; iOS 27 ARM64e migration and physical-device validation remain pending.' > out/songyuan/kernel/BUILD-SCOPE.txt
