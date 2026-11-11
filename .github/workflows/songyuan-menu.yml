@@ -4,7 +4,7 @@ on:
     inputs:
       uefi_run_id:
         description: Successful songyuan-uefi run with an unexpired songyuan-uefi artifact
-        default: '43028929595'
+        default: '43037599524'
         required: true
   push:
     paths: ['.github/workflows/songyuan-menu.yml']
@@ -24,17 +24,25 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: NiandeNian/songyuan-uefi
-          ref: a2e67bf85e84af2860d50050ab9abcd711d6ea10
+          ref: eeeac0330b022e1b6efa5843e9eb1ab4809811c7
           path: uefi-port
       - name: Host dependencies
+        timeout-minutes: 8
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang lld llvm device-tree-compiler
+          sudo python3 uefi-port/.github/scripts/apt_dns_fallback.py
+          for mirror in /etc/apt/apt-mirrors.txt /etc/apt/apt-security-mirrors.txt; do
+            if [ -f "$mirror" ]; then
+              sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g; s|http://|https://|g' "$mirror"
+            fi
+          done
+          apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 -o APT::Update::Error-Mode=any)
+          sudo apt-get "${apt_options[@]}" update
+          sudo apt-get "${apt_options[@]}" install -y clang lld llvm device-tree-compiler
       - uses: actions/download-artifact@v4
         with:
           name: songyuan-uefi
           repository: NiandeNian/songyuan-uefi
-          run-id: ${{ inputs.uefi_run_id || '43028929595' }}
+          run-id: ${{ inputs.uefi_run_id || '43037599524' }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: firmware
       - name: Fetch BootShim and boot image tool
