@@ -29,7 +29,11 @@ jobs:
       - name: Host dependencies
         timeout-minutes: 8
         run: |
-          sudo python3 uefi-port/.github/scripts/apt_dns_fallback.py
+          # The HTTPS resolver once returned a transient failure for security.
+          for attempt in 1 2 3; do
+            if sudo python3 uefi-port/.github/scripts/apt_dns_fallback.py; then break; fi
+            test "$attempt" -lt 3
+          done
           for mirror in /etc/apt/apt-mirrors.txt /etc/apt/apt-security-mirrors.txt; do
             if [ -f "$mirror" ]; then
               sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g; s|http://|https://|g' "$mirror"
