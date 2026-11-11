@@ -1,0 +1,87 @@
+name: songyuan kernel and graphics
+
+on:
+  workflow_dispatch:
+    inputs:
+      device_ref:
+        description: Pinned songyuan-device revision
+        default: e4730396385223ccff9fe0c292e4d6c057449457
+  push:
+    paths: ['scripts/**', '.github/workflows/songyuan.yml']
+
+permissions:
+  contents: read
+concurrency:
+  group: songyuan-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+
+jobs:
+  kernel:
+    runs-on: macos-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/checkout@v4
+        with:
+          repository: NiandeNian/songyuan-device
+          ref: ${{ inputs.device_ref || 'e4730396385223ccff9fe0c292e4d6c057449457' }}
+          path: device
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Host toolchain
+        run: |
+          xcodebuild -version
+          brew install cmake ninja unifdef llvm lld mtools dtc
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix lld)/bin" >> "$GITHUB_PATH"
+      - name: Check board and fetch pinned GPU firmware
+        run: |
+          python3 device/scripts/check-songyuan.py
+          python3 device/scripts/fetch-songyuan-gpu-firmware.py
+      - name: Build source-kernel ABI carrier
+        run: |
+          ./unixnu defconfig songyuan_bootstrap_defconfig -D device
+          ./unixnu fetch xnu libplatform libdispatch AvailabilityVersions libpthread corecrypto-2023 IOStorageFamily -D device
+          ./unixnu build kernel -D device
+          test -f out/songyuan/kernel/kernel.macho
+          test -f out/songyuan/kernel/kernel.json
+      - name: Build and link production touch and graphics drivers
+        run: |
+          ./unixnu defconfig songyuan_graphics_defconfig -D device
+          ./unixnu build kernel -D device
+          shasum -a 256 out/songyuan/kernel/kernel.macho
+      - name: Record verified build scope
+        run: |
+          echo 'Built against Darwin 23 ARM64 / iPadOS 17.7.11; iOS 27 ARM64e migration and physical-device validation remain pending.' > out/songyuan/kernel/BUILD-SCOPE.txt
+          echo 'No entry/panic-screen probe, diagnostic boot page or timed reboot is enabled.' >> out/songyuan/kernel/BUILD-SCOPE.txt
+      - name: Upload compiler logs and driver archives
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: songyuan-darwin23-graphics
+          path: |
+            out/songyuan/kernel/**
+            out/songyuan/logs/**
+            out/songyuan/tree/build/native-legacy-display/*.a
+            out/songyuan/tree/build/native-legacy-display/build-report.json
+            out/songyuan/tree/build/native-adreno-accelerator/*.a
+            out/songyuan/tree/build/sheng-platform-power/*.a
+            out/songyuan/tree/build/songyuan-runtime-state/*.a
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Remove proprietary inputs
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import shutil
+          from pathlib import Path
+          for path in (Path('out/ipsw'), Path('device/.cache/firmware')):
+              if path.exists():
+                  shutil.rmtree(path)
+          PY

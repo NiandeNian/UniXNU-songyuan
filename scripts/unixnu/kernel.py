@@ -53,7 +53,14 @@ def build_archives(ctx, env):
     """
     if not ctx.need_config().get('XNU_BUILD_ARCHIVES'):
         return
-    entries = ctx.board.get('kernel', {}).get('archives', [])
+    spec = ctx.board.get('kernel', {})
+    profile = ctx.need_config().get('XNU_ARCHIVE_PROFILE')
+    if profile:
+        entries = spec.get('archive_profiles', {}).get(profile)
+        if entries is None:
+            raise Error(f'No kernel archive profile {profile!r} in board.toml')
+    else:
+        entries = spec.get('archives', [])
     env = dict(env, PATH=toolchain_path())
     for index, entry in enumerate(entries, 1):
         parts = shlex.split(entry)
