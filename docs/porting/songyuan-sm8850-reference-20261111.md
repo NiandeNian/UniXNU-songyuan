@@ -74,3 +74,7 @@ QEMU 只提供通用 ARM64 CPU/RAM，并加载本机原厂 SEC 的静态 ELF PT_
 ## 后续验证次序
 
 菜单打包工作流已固定到该修复提交和成功的 DEBUG run，继续保留屏幕日志。真机重新在线后，临时启动同一构建的屏幕日志镜像，确定真实停止阶段。完整 UEFI 菜单上屏后，再进入本机 FT3683 总线、A840 冷启动与系统载荷验证。当前没有从这些 SM8850 资料中找到可独立复核的 iOS/iPadOS 27 真机完成案例。
+
+[菜单打包 Actions 43015116868](https://github.com/NiandeNian/UniXNU-songyuan/actions/runs/43015116868) 已成功，`boot.img` SHA-256 为 `cdce1effa6e4340feabe496d1bea2425fa7c2b9b2918680bb504d71f2ada35b0`。从该实际镜像提取39504字节的 BootShim 和 FD，确认 FD 与上述 UEFI Actions 产物逐字节相同，再原样用于 QEMU，停止点及 TPIDR/异常结果一致。手机离线，本轮未执行 USB 启动。
+
+文档构建也通过；派生仓库工作流保存 docs-preview 产物，不依赖未启用的 GitHub Pages 站点。此前 Docs run 在文档构建成功后因 Pages 未配置返回404，已修正为派生仓库只构建预览。
