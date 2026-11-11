@@ -5,7 +5,7 @@ on:
     inputs:
       device_ref:
         description: Pinned songyuan-device revision
-        default: e4730396385223ccff9fe0c292e4d6c057449457
+        default: 67f87ee9b5edc530a3e76ced019babbcf609ba6d
   push:
     paths: ['scripts/**', '.github/workflows/songyuan.yml']
 
@@ -30,7 +30,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: NiandeNian/songyuan-device
-          ref: ${{ inputs.device_ref || 'e4730396385223ccff9fe0c292e4d6c057449457' }}
+          ref: ${{ inputs.device_ref || '67f87ee9b5edc530a3e76ced019babbcf609ba6d' }}
+          submodules: recursive
           path: device
       - uses: actions/setup-python@v5
         with:

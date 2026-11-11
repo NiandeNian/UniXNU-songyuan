@@ -20,7 +20,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: NiandeNian/songyuan-device
-          ref: 5363cbe0ef24fdfdf8096aeaa5ad3b9f4bc7a069
+          ref: 67f87ee9b5edc530a3e76ced019babbcf609ba6d
+          submodules: recursive
           path: device
       - uses: actions/setup-python@v5
         with:
