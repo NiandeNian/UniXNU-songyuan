@@ -1,6 +1,11 @@
 name: songyuan UniXNU menu image
 on:
   workflow_dispatch:
+    inputs:
+      uefi_run_id:
+        description: Successful songyuan-uefi run with an unexpired songyuan-uefi artifact
+        default: '42959424537'
+        required: true
   push:
     paths: ['.github/workflows/songyuan-menu.yml']
 permissions:
@@ -29,7 +34,7 @@ jobs:
         with:
           name: songyuan-uefi
           repository: NiandeNian/songyuan-uefi
-          run-id: 42959424537
+          run-id: ${{ inputs.uefi_run_id || '42959424537' }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: firmware
       - name: Fetch BootShim and boot image tool
