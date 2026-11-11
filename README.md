@@ -30,9 +30,15 @@ Metal/Turnip bundle without a diagnostic daemon or timed boot reset.
 **iOS 27 is not bootable in this port yet.** The inspected iOS 27.2.1 kernel uses
 Darwin 27 / ARM64e / MH_FILESET, while the inherited source and driver ABI are
 Darwin 23 / ARM64. The matching XNU 13432.42.3 source tag is unavailable.
-The phone is online. Temporary menu boots currently remain black; touch and GPU
+The phone is currently offline. Temporary menu boots remained black; touch and GPU
 execution still require physical validation after the firmware boot chain works.
 See the device repository for the captured parameters and exact firmware pins.
+
+Offline work now uses [isolated QEMU tests](tests/qemu/README.zh-CN.md) with AAVMF,
+the UniXNU menu, DarwinBoot and a separately built generic kernel. The current
+official documentation also provides an experimental iPadOS 27.0.1 ARM64e
+profile; adopting that profile requires a separate ABI/PAC migration from this
+fork's Darwin 23 build and does not make the inspected iOS 27.2.1 input compatible.
 
 🎉 **News:** The native Metal GPU driver is now fully working on the Xiaomi Pad 6S Pro (sheng). The render server composites the system UI through the Adreno 740, and listed processes get their own Metal devices. See the [Adreno 740 driver documentation](https://unixnu.com/drivers/native-adreno).
 

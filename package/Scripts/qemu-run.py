@@ -33,8 +33,12 @@ ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b[()][A-Za-z0-9]")
 
 
 def find_firmware(code):
+    code = code or os.environ.get("UNIXNU_QEMU_FIRMWARE")
     if code:
-        return Path(code), None
+        code = Path(code)
+        variables = next((code.parent / name for name in ("AAVMF_VARS.fd", "edk2-arm-vars.fd", "QEMU_VARS.fd")
+                          if (code.parent / name).is_file()), None)
+        return code, variables
     qemu = shutil.which("qemu-system-aarch64")
     if qemu:
         share = Path(qemu).resolve().parent.parent / "share" / "qemu"
@@ -119,6 +123,8 @@ def main() -> int:
     parser.add_argument("--disk", action="append", default=[], type=Path, help="extra raw disk image (read-only)")
     parser.add_argument("--timeout", type=float, default=90.0)
     parser.add_argument("--cpus", type=int, default=2, help="number of virtual CPUs (default: 2)")
+    parser.add_argument("--cpu", default=os.environ.get("UNIXNU_QEMU_CPU", "cortex-a72"),
+                        help="QEMU CPU model (default: cortex-a72 or UNIXNU_QEMU_CPU)")
     parser.add_argument("--finish-on-expect", action="store_true",
                         help="finish two seconds after all expected patterns match")
     parser.add_argument("--menu-marker", default=r"UNIXNU: menu: shown")
@@ -148,7 +154,7 @@ def main() -> int:
         args.log.unlink()
 
     cmd = [
-        qemu, "-M", "virt", "-cpu", "cortex-a72", "-m", "1024", "-smp", str(args.cpus),
+        qemu, "-M", "virt", "-cpu", args.cpu, "-m", "1024", "-smp", str(args.cpus),
         "-drive", f"if=pflash,format=raw,readonly=on,file={code}",
     ]
     if vars_template:

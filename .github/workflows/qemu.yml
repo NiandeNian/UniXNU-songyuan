@@ -25,11 +25,14 @@ jobs:
           git clone https://github.com/microsoft/mu_basecore "$RUNNER_TEMP/edk2"
           git -C "$RUNNER_TEMP/edk2" checkout 6f805f26a4366fe56790130dc2f8f3e1b4c2fe28
           git -C "$RUNNER_TEMP/edk2" submodule update --init --depth 1 MdePkg/Library/BaseFdtLib/libfdt MdePkg/Library/MipiSysTLib/mipisyst BaseTools/Source/C/BrotliCompress/brotli
+          bash tests/qemu/fetch-firmware.sh "$RUNNER_TEMP/aavmf"
       - name: Build and boot the UEFI package
         env:
           UNIXNU_EDK2: ${{ runner.temp }}/edk2
           CLANG_BIN: /usr/lib/llvm-14/bin/
           JOBS: '8'
+          UNIXNU_QEMU_FIRMWARE: ${{ runner.temp }}/aavmf/extracted/usr/share/AAVMF/AAVMF_CODE.fd
+          UNIXNU_QEMU_CPU: max
         run: |
           bash tests/qemu/build-uefi.sh
           bash package/Scripts/smoke.sh
@@ -63,7 +66,7 @@ jobs:
         run: |
           ./unixnu defconfig qemu_entry_defconfig -D tests/qemu/device
           ./unixnu fetch xnu libplatform libdispatch AvailabilityVersions libpthread corecrypto-2023 IOStorageFamily -D tests/qemu/device
-          ./unixnu kernel -D tests/qemu/device
+          ./unixnu build kernel -D tests/qemu/device
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -90,7 +93,10 @@ jobs:
       - name: Install QEMU
         run: sudo apt-get update -qq && sudo apt-get install -y qemu-system-arm qemu-efi-aarch64
       - name: Observe real XNU startup
+        env:
+          UNIXNU_QEMU_FIRMWARE: ${{ runner.temp }}/aavmf/extracted/usr/share/AAVMF/AAVMF_CODE.fd
         run: |
+          bash tests/qemu/fetch-firmware.sh "$RUNNER_TEMP/aavmf"
           python3 tests/qemu/run-entry.py --efi-dir out/qemu/uefi --kernel out/qemu/compiled/kernel/kernel.macho --out out/qemu/entry
       - uses: actions/upload-artifact@v4
         if: always()
