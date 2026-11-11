@@ -1,0 +1,53 @@
+name: songyuan UniXNU menu image
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/songyuan-menu.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: NiandeNian/songyuan-device
+          ref: 5363cbe0ef24fdfdf8096aeaa5ad3b9f4bc7a069
+          path: device
+      - uses: actions/checkout@v4
+        with:
+          repository: NiandeNian/songyuan-uefi
+          ref: a4570c5280ac65f2b59b3d819e25872312f39cfc
+          path: uefi-port
+      - name: Host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm device-tree-compiler
+      - uses: actions/download-artifact@v4
+        with:
+          name: songyuan-uefi
+          repository: NiandeNian/songyuan-uefi
+          run-id: 42959424537
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: firmware
+      - name: Fetch BootShim and boot image tool
+        run: |
+          git init Mu-Silicium
+          git -C Mu-Silicium fetch --depth 1 https://github.com/Project-Silicium/Mu-Silicium.git 46e4ac0800862fb3ee6da09f0028fbef4e767648
+          git -C Mu-Silicium checkout FETCH_HEAD
+          cp uefi-port/Resources/Configs/songyuan.toml Mu-Silicium/Resources/Configs/songyuan.toml
+          sed -i 's/\.quad FD_SIZE /\.quad FD_SIZE + _Payload - _Head /' Mu-Silicium/BootShim/BootShim.S
+      - name: Pack and verify the UniXNU menu image
+        run: |
+          fd=$(find firmware -name SILICIUM_UEFI.fd -type f)
+          test -f "$fd"
+          ./unixnu bootimg -D device --uefi Mu-Silicium --fd "$fd" --dtb device/inputs/canoe.dtb --ramdisk none
+          echo 'UniXNU menu and DarwinBoot firmware image; no OS payload is included. Intended for fastboot boot. Physical boot and iOS 27 support are unverified.' > out/songyuan/boot/BUILD-SCOPE.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: songyuan-unixnu-menu
+          path: out/songyuan/boot/**
+          if-no-files-found: error
+          retention-days: 14
