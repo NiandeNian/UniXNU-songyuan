@@ -58,6 +58,9 @@ while i < len(args):
         i += 1
 cmd += ['-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter', '-Wno-unnecessary-virtual-specifier', '-Wno-c99-designator',
         '-Wno-reorder-init-list', '-Wno-deprecated-enum-enum-conversion', '-Wno-overloaded-virtual',
+        # Module directories are symlinks and the device may override only NativeAdreno.
+        # Resolve its quoted ../NativeMetal include through the selected base module.
+        '-I', str(ROOT / 'drivers/NativeMetal'),
         '-I', str(ROOT / '.cache/xnu-work/osfmk')]
 subprocess.run(cmd, cwd=record['directory'], check=True)
 
