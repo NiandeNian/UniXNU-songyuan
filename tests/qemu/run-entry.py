@@ -140,6 +140,7 @@ def main():
     parser.add_argument('--kernel', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--timeout', type=int, default=90)
+    parser.add_argument('--without-amfi-node', action='store_true', help='Negative DT control: retain the real missing-policy panic')
     args = parser.parse_args()
     if not 1 <= args.timeout <= 600:
         parser.error('--timeout must be between 1 and 600 seconds')
@@ -158,13 +159,15 @@ def main():
     adt = payload / 'kernel.macho.adt'
     subprocess.run([sys.executable, ROOT / 'scripts/qemu-entry/make-dt.py', '--armvirt', '--armcpu',
                     '--nvram-proxy', '--qemu-vmm-present', '--crypto-hash-method', 'sha2-384',
+                    *([] if args.without_amfi_node else ['--amfi-platform-only']),
                     '--osenvironment', 'main', '--dram-size', '0x80000000', '--owned-memory-size', '0x20000000',
                     '--output', adt], check=True)
     tree, end = parse_adt(adt.read_bytes())
     assert end == adt.stat().st_size
     trim_adt(tree)
     adt.write_bytes(encode_adt(tree))
-    (esp / 'EFI/UniXNU/unixnu.toml').write_text('''[boot]
+    (esp / 'EFI/UniXNU/unixnu.toml').write_text('''version = 1
+[boot]
 default = "xnu"
 timeout = 1
 [[driver]]
@@ -186,6 +189,7 @@ args = "-v serial=3 debug=0x14e kt_fixed_zones=120"
     report = {'kernel_sha256': hashlib.sha256(args.kernel.read_bytes()).hexdigest(),
               'adt_sha256': hashlib.sha256(adt.read_bytes()).hexdigest(), 'cpu': 'max', 'memory_mib': 2048,
               'scope': 'generic XNU entry; no root or hardware validation', 'checkpoints': [],
+              'amfi_platform_only_node': not args.without_amfi_node,
               'registers_or_validation_state_modified': False,
               'firmware_sha256': hashlib.sha256(code.read_bytes()).hexdigest()}
     log = args.out / 'serial.log'
@@ -264,6 +268,7 @@ args = "-v serial=3 debug=0x14e kt_fixed_zones=120"
     sctlr = int(kernel_registers.get('SCTLR_EL1', '0'), 16)
     report['native_4k_mmu_observed'] = bool(sctlr & 1) and (tcr >> 14 & 3) == 0 and (tcr >> 30 & 3) == 2
     report['counter_62500000_observed'] = int(kernel_registers.get('CNTFRQ_EL0', '0'), 16) == 62500000
+    report['entry_pass'] = report['entry_pass'] and report['native_4k_mmu_observed'] and report['counter_62500000_observed']
     (args.out / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2))
     return 0 if report['entry_pass'] else 1

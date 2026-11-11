@@ -81,6 +81,7 @@ jobs:
         if: always()
         with:
           name: qemu-kernel
+          include-hidden-files: true
           path: |
             out/qemu/kernel/**
             out/qemu/logs/**
@@ -108,11 +109,24 @@ jobs:
         run: |
           bash tests/qemu/fetch-firmware.sh "$RUNNER_TEMP/aavmf"
           python3 tests/qemu/run-entry.py --efi-dir out/qemu/uefi --kernel out/qemu/compiled/kernel/kernel.macho --out out/qemu/entry
+          if python3 tests/qemu/run-entry.py --efi-dir out/qemu/uefi --kernel out/qemu/compiled/kernel/kernel.macho --out out/qemu/entry/negative --without-amfi-node; then
+            echo 'Missing AMFI policy was incorrectly accepted'
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('out/qemu/entry/negative/report.json').read_text())
+          assert report['loader_validated'] and report['native_4k_mmu_observed']
+          assert not report['entry_pass']
+          assert 'AMFI: no amfi-only-platform-code device tree node' in report.get('panic_format', '')
+          assert '_bsd_init' not in [stop['symbol'] for stop in report['checkpoints']]
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: qemu-entry-evidence
           path: |
-            out/qemu/entry/*.json
-            out/qemu/entry/*.log
-            out/qemu/entry/*.png
+            out/qemu/entry/**/*.json
+            out/qemu/entry/**/*.log
+            out/qemu/entry/**/*.png
