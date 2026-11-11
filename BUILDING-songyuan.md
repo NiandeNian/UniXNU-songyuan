@@ -48,4 +48,8 @@ pipeline, which additionally needs signed OS/SystemOS policies and a Data seed.
 The current kernel and Apple driver ABI are Darwin 23 / ARM64. The inspected
 iOS 27.2.1 target uses Darwin 27 / ARM64e and remains incompatible. The build
 scope files inside artifacts record this distinction. Physical menu boot,
-touch input, accelerated display, and OS startup await the phone's return online.
+touch input, accelerated display, and OS startup are not yet validated. The phone
+is online; temporary firmware boots currently remain black. The production menu
+image uses raw ARM64, Android header v4, text_offset=0 and flags=0xa. The firmware
+copy address remains 0xa7100000. Its FD and full image hashes are checked against
+the Actions artifact before temporary boot.

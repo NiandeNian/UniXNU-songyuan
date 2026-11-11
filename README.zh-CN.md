@@ -28,8 +28,8 @@ SM8850 触控与 Adreno 840 适配。Actions 编译菜单启动镜像、Darwin 2
 
 **当前尚不能启动 iOS 27。** 实测 iOS 27.2.1 内核使用 Darwin 27、ARM64e 和
 MH_FILESET；继承的源码与驱动 ABI 使用 Darwin 23、ARM64。对应的
-XNU 13432.42.3 源码标签尚未公开。手机离线期间只能验证构建，菜单、触控和
-GPU 的实际运行仍需上机验证。实测设备参数和固定固件版本见设备仓库。
+XNU 13432.42.3 源码标签尚未公开。手机已在线，当前临时菜单启动仍黑屏；
+触控和 GPU 的实际运行需在固件启动链正常后继续验证。实测设备参数和固定固件版本见设备仓库。
 
 🎉 **News:** 原生 Metal GPU 驱动已完全工作在小米平板 6S Pro（sheng）上。render server 通过 Adreno 740 合成系统界面，列入白名单的进程会获得各自的 Metal 设备。详见 [Adreno 740 驱动文档](https://unixnu.com/zh/drivers/native-adreno)。
 
