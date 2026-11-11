@@ -24,7 +24,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: NiandeNian/songyuan-uefi
-          ref: eeeac0330b022e1b6efa5843e9eb1ab4809811c7
+          # Only CI DNS helpers changed after FD run 43037599524; runtime inputs match.
+          ref: 16ed34e09c855db3cc9fc55e7c36051337b035e1
           path: uefi-port
       - name: Host dependencies
         timeout-minutes: 8
